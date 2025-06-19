@@ -4,7 +4,7 @@
 """
 
 from typing import Optional, List
-from pydantic import field_validator, PostgresDsn
+from pydantic import field_validator, PostgresDsn, ConfigDict
 from pydantic_settings import BaseSettings
 from pydantic.networks import AnyHttpUrl
 import secrets
@@ -12,6 +12,12 @@ import secrets
 
 class Settings(BaseSettings):
     """Основные настройки приложения"""
+
+    model_config = ConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra='ignore'  # Игнорируем дополнительные поля
+    )
 
     # Основные настройки
     PROJECT_NAME: str = "Telegram Marketplace"
@@ -29,6 +35,13 @@ class Settings(BaseSettings):
 
     # CORS
     BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = []
+
+    @field_validator("DEBUG", mode="before")
+    @classmethod
+    def validate_debug(cls, v):
+        if isinstance(v, str):
+            return v.lower() in ("true", "1", "yes", "on")
+        return bool(v)
 
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod
@@ -57,13 +70,15 @@ class Settings(BaseSettings):
             path="/marketplace_db"
         )
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
-
 
 class TelegramSettings(BaseSettings):
     """Настройки Telegram бота"""
+
+    model_config = ConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra='ignore'
+    )
 
     BOT_TOKEN: str
     WEBHOOK_URL: Optional[str] = None
@@ -74,13 +89,35 @@ class TelegramSettings(BaseSettings):
     MAX_MESSAGE_LENGTH: int = 4096
     MAX_CAPTION_LENGTH: int = 1024
 
-    class Config:
-        env_prefix = "TELEGRAM_"
-        env_file = ".env"
+    @field_validator("ADMIN_CHAT_ID", mode="before")
+    @classmethod
+    def validate_admin_chat_id(cls, v):
+        if v is None or v == "" or v == "your_admin_chat_id":
+            return None
+        try:
+            return int(v)
+        except (ValueError, TypeError):
+            return None
+
+    @field_validator("ASSEMBLY_CHAT_ID", mode="before")
+    @classmethod
+    def validate_assembly_chat_id(cls, v):
+        if v is None or v == "" or v == "your_assembly_chat_id":
+            return None
+        try:
+            return int(v)
+        except (ValueError, TypeError):
+            return None
 
 
 class PaymentSettings(BaseSettings):
     """Настройки платежных систем"""
+
+    model_config = ConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra='ignore'
+    )
 
     # USDT кошельки
     USDT_TRC20_WALLET: str
@@ -102,16 +139,34 @@ class PaymentSettings(BaseSettings):
     MIN_USDT_AMOUNT: float = 1.0
     MAX_USDT_AMOUNT: float = 10000.0
 
-    class Config:
-        env_file = ".env"
+    @field_validator("SBP_TEST_MODE", mode="before")
+    @classmethod
+    def validate_sbp_test_mode(cls, v):
+        if isinstance(v, str):
+            return v.lower() in ("true", "1", "yes", "on")
+        return bool(v)
 
 
 class CDEKSettings(BaseSettings):
     """Настройки СДЭК API"""
 
+    model_config = ConfigDict(
+        env_file=".env",
+        env_prefix="CDEK_",
+        case_sensitive=True,
+        extra='ignore'
+    )
+
     CLIENT_ID: str
     CLIENT_SECRET: str
     TEST_MODE: bool = True
+
+    @field_validator("TEST_MODE", mode="before")
+    @classmethod
+    def validate_test_mode(cls, v):
+        if isinstance(v, str):
+            return v.lower() in ("true", "1", "yes", "on")
+        return bool(v)
 
     # URLs для API
     @property
@@ -132,13 +187,15 @@ class CDEKSettings(BaseSettings):
     def order_url(self) -> str:
         return f"{self.base_url}/orders"
 
-    class Config:
-        env_prefix = "CDEK_"
-        env_file = ".env"
-
 
 class MarketplaceSettings(BaseSettings):
     """Настройки маркетплейса"""
+
+    model_config = ConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra='ignore'
+    )
 
     # Доставка
     FREE_DELIVERY_THRESHOLD: int = 2000  # Бесплатная доставка от суммы
@@ -159,12 +216,18 @@ class MarketplaceSettings(BaseSettings):
     UPLOAD_PATH: str = "static/uploads"
     ALLOWED_IMAGE_TYPES: List[str] = ["image/jpeg", "image/png", "image/webp"]
 
-    class Config:
-        env_file = ".env"
+    # Платежи
+    PAYMENT_TIMEOUT_MINUTES: int = 30
 
 
 class RedisSettings(BaseSettings):
     """Настройки Redis"""
+
+    model_config = ConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra='ignore'
+    )
 
     REDIS_URL: str = "redis://localhost:6379/0"
     REDIS_EXPIRE_SECONDS: int = 3600  # 1 час
@@ -174,9 +237,6 @@ class RedisSettings(BaseSettings):
     SESSION_PREFIX: str = "session:"
     PAYMENT_PREFIX: str = "payment:"
     RATE_LIMIT_PREFIX: str = "rate_limit:"
-
-    class Config:
-        env_file = ".env"
 
 
 # Создание экземпляров настроек
