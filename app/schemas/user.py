@@ -63,30 +63,9 @@ class UserResponseSchema(BaseResponseSchema):
     last_activity: Optional[datetime] = None
 
     # Вычисляемые поля
-    display_name: str
-    is_new_user: bool
-    total_orders: int
-
-    @field_validator("display_name", mode="before")
-    @classmethod
-    def get_display_name(cls, v, info):
-        """Вычисление отображаемого имени"""
-        if hasattr(info.data, "full_name") and info.data.full_name:
-            return info.data.full_name
-
-        parts = []
-        if hasattr(info.data, "first_name") and info.data.first_name:
-            parts.append(info.data.first_name)
-        if hasattr(info.data, "last_name") and info.data.last_name:
-            parts.append(info.data.last_name)
-
-        if parts:
-            return " ".join(parts)
-
-        username = getattr(info.data, "username", None)
-        telegram_id = getattr(info.data, "telegram_id", None)
-
-        return username or f"User {telegram_id}"
+    display_name: str = ""
+    is_new_user: bool = False
+    total_orders: int = 0
 
 
 class UserProfileSchema(BaseSchema):
