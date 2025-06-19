@@ -3,8 +3,8 @@ Pydantic схемы для товаров
 """
 
 from decimal import Decimal
-from typing import Optional, List
-from pydantic import field_validator, Field, computed_field
+from typing import Optional, List, Annotated
+from pydantic import field_validator, Field, computed_field, model_validator
 
 from app.schemas import BaseSchema, BaseCreateSchema, BaseUpdateSchema, BaseResponseSchema
 
@@ -14,7 +14,7 @@ class ProductCreateSchema(BaseCreateSchema):
 
     name: str = Field(..., min_length=1, max_length=500, description="Название товара")
     description: Optional[str] = Field(None, max_length=5000, description="Описание товара")
-    price: Decimal = Field(..., gt=0, decimal_places=2, description="Цена в рублях")
+    price: Decimal = Field(..., gt=0, description="Цена в рублях")
     image_url: Optional[str] = Field(None, max_length=1000, description="URL изображения")
     detail_url: Optional[str] = Field(None, max_length=1000, description="Ссылка на подробности")
 
@@ -27,7 +27,7 @@ class ProductCreateSchema(BaseCreateSchema):
     tags: Optional[str] = Field(None, description="Теги через запятую")
 
     # Характеристики
-    weight: Optional[Decimal] = Field(None, ge=0, decimal_places=3, description="Вес в граммах")
+    weight: Optional[Decimal] = Field(None, ge=0, description="Вес в граммах")
     dimensions: Optional[str] = Field(None, max_length=100, description="Размеры ДxШxВ см")
 
     # Лимиты заказа
@@ -36,14 +36,29 @@ class ProductCreateSchema(BaseCreateSchema):
 
     notes: Optional[str] = Field(None, description="Внутренние заметки")
 
-    @field_validator("max_order_quantity")
+    @field_validator("price")
     @classmethod
-    def validate_max_order_quantity(cls, v, info):
-        if v is not None and "min_order_quantity" in info.data:
-            min_qty = info.data["min_order_quantity"]
-            if v < min_qty:
-                raise ValueError("Максимальное количество не может быть меньше минимального")
+    def validate_price(cls, v):
+        if v <= 0:
+            raise ValueError("Цена должна быть больше 0")
+        # Ограничиваем до 2 знаков после запятой
+        return v.quantize(Decimal('0.01'))
+
+    @field_validator("weight")
+    @classmethod
+    def validate_weight(cls, v):
+        if v is not None:
+            if v < 0:
+                raise ValueError("Вес не может быть отрицательным")
+            # Ограничиваем до 3 знаков после запятой
+            return v.quantize(Decimal('0.001'))
         return v
+
+    @model_validator(mode='after')
+    def validate_order_quantities(self):
+        if self.max_order_quantity is not None and self.max_order_quantity < self.min_order_quantity:
+            raise ValueError("Максимальное количество не может быть меньше минимального")
+        return self
 
 
 class ProductUpdateSchema(BaseUpdateSchema):
@@ -51,7 +66,7 @@ class ProductUpdateSchema(BaseUpdateSchema):
 
     name: Optional[str] = Field(None, min_length=1, max_length=500)
     description: Optional[str] = Field(None, max_length=5000)
-    price: Optional[Decimal] = Field(None, gt=0, decimal_places=2)
+    price: Optional[Decimal] = Field(None, gt=0, description="Цена в рублях")
     image_url: Optional[str] = Field(None, max_length=1000)
     detail_url: Optional[str] = Field(None, max_length=1000)
 
@@ -63,13 +78,31 @@ class ProductUpdateSchema(BaseUpdateSchema):
     sort_order: Optional[int] = None
     tags: Optional[str] = None
 
-    weight: Optional[Decimal] = Field(None, ge=0, decimal_places=3)
+    weight: Optional[Decimal] = Field(None, ge=0, description="Вес в граммах")
     dimensions: Optional[str] = Field(None, max_length=100)
 
     min_order_quantity: Optional[int] = Field(None, ge=1)
     max_order_quantity: Optional[int] = Field(None, ge=1)
 
     notes: Optional[str] = None
+
+    @field_validator("price")
+    @classmethod
+    def validate_price(cls, v):
+        if v is not None:
+            if v <= 0:
+                raise ValueError("Цена должна быть больше 0")
+            return v.quantize(Decimal('0.01'))
+        return v
+
+    @field_validator("weight")
+    @classmethod
+    def validate_weight(cls, v):
+        if v is not None:
+            if v < 0:
+                raise ValueError("Вес не может быть отрицательным")
+            return v.quantize(Decimal('0.001'))
+        return v
 
 
 class ProductResponseSchema(BaseResponseSchema):
@@ -213,13 +246,12 @@ class ProductFilterSchema(BaseSchema):
     page: int = Field(1, ge=1)
     per_page: int = Field(20, ge=1, le=100)
 
-    @field_validator("max_price")
-    @classmethod
-    def validate_price_range(cls, v, info):
-        if v is not None and "min_price" in info.data and info.data["min_price"] is not None:
-            if v <= info.data["min_price"]:
+    @model_validator(mode='after')
+    def validate_price_range(self):
+        if self.max_price is not None and self.min_price is not None:
+            if self.max_price <= self.min_price:
                 raise ValueError("Максимальная цена должна быть больше минимальной")
-        return v
+        return self
 
 
 class ProductSearchSchema(BaseSchema):
@@ -237,5 +269,5 @@ class ProductStatsSchema(BaseSchema):
     orders_count: int
     total_ordered_quantity: int
     revenue: Decimal
-    avg_rating: Optional[float] = None
-    last_ordered: Optional[str] = None
+    current_stock: int
+    is_low_stock: bool
