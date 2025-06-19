@@ -4,7 +4,7 @@ Pydantic схемы для товаров
 
 from decimal import Decimal
 from typing import Optional, List
-from pydantic import field_validator, Field
+from pydantic import field_validator, Field, computed_field
 
 from app.schemas import BaseSchema, BaseCreateSchema, BaseUpdateSchema, BaseResponseSchema
 
@@ -98,12 +98,41 @@ class ProductResponseSchema(BaseResponseSchema):
     views_count: int
     orders_count: int
 
-    # Вычисляемые поля
-    display_price: str
-    stock_status: str
-    is_in_stock: bool
-    is_low_stock: bool
-    is_purchasable: bool
+    @computed_field
+    @property
+    def display_price(self) -> str:
+        """Цена в читаемом формате"""
+        return f"{self.price:,.2f} ₽".replace(",", " ")
+
+    @computed_field
+    @property
+    def stock_status(self) -> str:
+        """Статус наличия товара"""
+        if not self.is_available:
+            return "Недоступен"
+        if self.stock_quantity <= 0:
+            return "Нет в наличии"
+        if self.stock_quantity < 30:  # LOW_STOCK_THRESHOLD
+            return f"Заканчивается ({self.stock_quantity} шт.)"
+        return f"В наличии ({self.stock_quantity} шт.)"
+
+    @computed_field
+    @property
+    def is_in_stock(self) -> bool:
+        """Есть ли товар в наличии"""
+        return self.stock_quantity > 0
+
+    @computed_field
+    @property
+    def is_low_stock(self) -> bool:
+        """Заканчивается ли товар"""
+        return self.stock_quantity < 30  # LOW_STOCK_THRESHOLD
+
+    @computed_field
+    @property
+    def is_purchasable(self) -> bool:
+        """Можно ли купить товар"""
+        return self.is_available and not self.is_hidden and self.is_in_stock
 
 
 class ProductCatalogSchema(BaseSchema):
@@ -113,17 +142,44 @@ class ProductCatalogSchema(BaseSchema):
     name: str
     description: Optional[str] = None
     price: Decimal
-    display_price: str
     image_url: Optional[str] = None
 
     is_available: bool
-    is_in_stock: bool
-    stock_status: str
-    is_purchasable: bool
+    stock_quantity: int
 
     category: Optional[str] = None
     min_order_quantity: int
     max_order_quantity: Optional[int] = None
+
+    @computed_field
+    @property
+    def display_price(self) -> str:
+        """Цена в читаемом формате"""
+        return f"{self.price:,.2f} ₽".replace(",", " ")
+
+    @computed_field
+    @property
+    def is_in_stock(self) -> bool:
+        """Есть ли товар в наличии"""
+        return self.stock_quantity > 0
+
+    @computed_field
+    @property
+    def stock_status(self) -> str:
+        """Статус наличия товара"""
+        if not self.is_available:
+            return "Недоступен"
+        if self.stock_quantity <= 0:
+            return "Нет в наличии"
+        if self.stock_quantity < 30:
+            return f"Заканчивается ({self.stock_quantity} шт.)"
+        return f"В наличии ({self.stock_quantity} шт.)"
+
+    @computed_field
+    @property
+    def is_purchasable(self) -> bool:
+        """Можно ли купить товар"""
+        return self.is_available and self.is_in_stock
 
 
 class ProductAdminSchema(ProductResponseSchema):
